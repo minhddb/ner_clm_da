@@ -13,8 +13,10 @@ class Linearisation:
     pass
 
 
-class SequenceLinearisation:
+class SequenceLinearisation: 
     def __init__(self, sequence: List[str], tags: List[str]):
+        self.BOS_TOKEN = "<s>"
+        self.EOS_TOKEN = "</s>"
         self.sequence = sequence
         self.tags = tags
         self.extractor = ContextEntityExtraction(self.sequence, self.tags)
@@ -31,9 +33,9 @@ class SequenceLinearisation:
     def __call__(self, mode="span"):
         assert mode in ["span", "label"]
         if mode == "span":
-            return self.span_wise()
+           return " ".join(self.span_wise())
         if mode == "label":
-            return self.label_wise()
+            return " ".join(self.label_wise())
    
     def span_wise(self):
         """
@@ -41,7 +43,7 @@ class SequenceLinearisation:
         :return: List of linearised tokens.
         E.g.: [Token_1, Token_2, <TAG1>, Token_3, Token_4, </TAG1>, <TAG2>, Token_5 </TAG2>, Token_6, Token_7]
         """
-        linearised = []
+        linearised = [self.BOS_TOKEN]
         for i, token in enumerate(self.sequence):
             if i not in self.entity_tokens_ids:
                 linearised.append(token)
@@ -56,6 +58,7 @@ class SequenceLinearisation:
                 else:
                     linearised.append(token)
         assert all(token in linearised for token in self.sequence)
+        linearised.append(self.EOS_TOKEN)
         return linearised
     
     def label_wise(self):

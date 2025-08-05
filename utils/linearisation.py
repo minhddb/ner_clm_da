@@ -1,34 +1,26 @@
 from typing import List, Dict
-from datasets import Dataset
-from dataset import Data, DatasetLoader, SequenceSegmentation
-from dataset.utils import EntityCount, ContextEntityExtraction
-
+from segmentation import SequenceSegmentation 
 from itertools import chain
 
-class Linearisation:
-    def __init__(self, dataset: Dataset, ids_to_labels_mapping: Dict, tag_name: str = "ner_tags"):
-        self.dataset = dataset
-        self.ids_to_labels_mapping = ids_to_labels_mapping
-        self.tag_name = tag_name
-    pass
 
-
-class SequenceLinearisation: 
-    def __init__(self, sequence: List[str], tags: List[str]):
+class SequenceLinearisation(SequenceSegmentation): 
+    def __init__(self, sequence: List[str], tags: List[str], domain_tag=None):
+        super().__init__(sequence=sequence, tags=tags)
         self.BOS_TOKEN = "<s>"
         self.EOS_TOKEN = "</s>"
-        self.sequence = sequence
-        self.tags = tags
-        self.extractor = ContextEntityExtraction(self.sequence, self.tags)
+        if domain_tag is not None:
+            self.domain_tag = domain_tag
         self.entity_tokens_ids = list(
             chain.from_iterable(
-                self.extractor.extract_entity()[2]
+                [tokens_ids for tokens_ids in self.get_entity_tokens_ids()]
             )
         )
         self.context_tokens_ids = list(chain.from_iterable(
-            self.extractor.extract_context_windows_ids(windows_size=1)
+            self.get_context_windows_tokens_ids(windows_size=1)
         )
         )
+        print(self.context_tokens_ids)
+        self.linearised = [self.BOS_TOKEN]
 
     def __call__(self, mode="span"):
         assert mode in ["span", "label"]
@@ -36,7 +28,13 @@ class SequenceLinearisation:
            return " ".join(self.span_wise())
         if mode == "label":
             return " ".join(self.label_wise())
-   
+    
+    def context_wise(self):
+        """
+        """
+        pass
+
+
     def span_wise(self):
         """
         Insert entity tags before and after each entity span within the sequence.
@@ -45,18 +43,19 @@ class SequenceLinearisation:
         """
         linearised = [self.BOS_TOKEN]
         for i, token in enumerate(self.sequence):
-            if i not in self.entity_tokens_ids:
-                linearised.append(token)
-            else:
+            print(token, tags[i])
+            if i in self.entity_tokens_ids:
                 entity = tags[i].strip("B-").strip("I-")
                 if tags[i].startswith("B-"):
                     linearised.append(f"<{entity}>")
                     linearised.append(token)
-                elif tags[i + 1].strip("B-").strip("I-") != entity:
+                    if tags[i+1].strip("B-").strip("B-").strip("I-") != entity:
+                        linearised.append(f"</{entity}>")
+                elif tags[i].strip("B-").strip("I-") != tags[i+1].strip("B-").strip("I-"):
                     linearised.append(token)
                     linearised.append(f"</{entity}>")
-                else:
-                    linearised.append(token)
+            else:
+                linearised.append(token)
         assert all(token in linearised for token in self.sequence)
         linearised.append(self.EOS_TOKEN)
         return linearised
@@ -64,7 +63,7 @@ class SequenceLinearisation:
     def label_wise(self):
         """
         """
-        linearised = []
+        linearised = [self.BOS_TOKEN]
         for i, token in enumerate(self.sequence):
             if i not in self.entity_tokens_ids:
                 linearised.append(token)
@@ -72,15 +71,8 @@ class SequenceLinearisation:
                 linearised.append(f"<{tags[i]}>")
                 linearised.append(token)
                 linearised.append(f"</{tags[i]}>")
+        linearised.append(self.EOS_TOKEN)
         return linearised
-
-    @staticmethod
-    def context_tag():
-        pass
-
-    @staticmethod
-    def entity_tag():
-        pass
 
 
 if __name__=="__main__":
@@ -90,6 +82,7 @@ if __name__=="__main__":
     tags = ['O', 'B-ORG', 'I-ORG', 'O', 'O', 'O', 'O', 'O', 'O', 'B-MISC', 'O', 'O', 'O', 'O', 'O', 'B-MISC', 'O', 'O',
             'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O']
     linearisation = SequenceLinearisation(tokens, tags)
+    print(" ".join(tokens))
     print(linearisation())
     print(linearisation(mode="label"))
 

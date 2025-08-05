@@ -19,8 +19,7 @@ class SequenceLinearisation(SequenceSegmentation):
             self.get_context_windows_tokens_ids(windows_size=1)
         )
         )
-        print(self.context_tokens_ids)
-        self.linearised = [self.BOS_TOKEN]
+
 
     def __call__(self, mode="span"):
         assert mode in ["span", "label"]
@@ -85,8 +84,4 @@ if __name__=="__main__":
     print(" ".join(tokens))
     print(linearisation())
     print(linearisation(mode="label"))
-
-
-    # entity_counter = EntityCount(train_dataset, mapping_dict=ids2labels)
-    # entity_distribution = entity_counter.count_occurrences()
     print()

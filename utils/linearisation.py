@@ -1,6 +1,7 @@
 from typing import List, Dict
-from segmentation import SequenceSegmentation 
+from utils.segmentation import SequenceSegmentation 
 from itertools import chain
+import re
 
 
 class SequenceLinearisation(SequenceSegmentation): 
@@ -20,7 +21,6 @@ class SequenceLinearisation(SequenceSegmentation):
         )
         )
 
-
     def __call__(self, mode="span"):
         assert mode in ["span", "label"]
         if mode == "span":
@@ -33,30 +33,27 @@ class SequenceLinearisation(SequenceSegmentation):
         """
         pass
 
-
     def span_wise(self):
         """
         Insert entity tags before and after each entity span within the sequence.
         :return: List of linearised tokens.
         E.g.: [Token_1, Token_2, <TAG1>, Token_3, Token_4, </TAG1>, <TAG2>, Token_5 </TAG2>, Token_6, Token_7]
         """
-        linearised = [self.BOS_TOKEN]
+        linearised = [] # [self.BOS_TOKEN]
         for i, token in enumerate(self.sequence):
-            print(token, tags[i])
             if i in self.entity_tokens_ids:
-                entity = tags[i].strip("B-").strip("I-")
-                if tags[i].startswith("B-"):
+                entity = re.sub(r"^[BI]-", "", self.tags[i])
+                if self.tags[i].startswith("B-"):
                     linearised.append(f"<{entity}>")
                     linearised.append(token)
-                    if tags[i+1].strip("B-").strip("B-").strip("I-") != entity:
+                    if len(self.tags) <= i+1 or re.sub(r"^[BI]-", "", self.tags[i+1]) != entity:
                         linearised.append(f"</{entity}>")
-                elif tags[i].strip("B-").strip("I-") != tags[i+1].strip("B-").strip("I-"):
+                elif len(self.tags) <= i+1 or re.sub(r"^[BI]-", "", self.tags[i+1]) != entity:
                     linearised.append(token)
-                    linearised.append(f"</{entity}>")
+                    linearised.append(f"</{entity}>")      
             else:
                 linearised.append(token)
-        assert all(token in linearised for token in self.sequence)
-        linearised.append(self.EOS_TOKEN)
+        # linearised.append(self.EOS_TOKEN)
         return linearised
     
     def label_wise(self):
@@ -67,9 +64,9 @@ class SequenceLinearisation(SequenceSegmentation):
             if i not in self.entity_tokens_ids:
                 linearised.append(token)
             else:
-                linearised.append(f"<{tags[i]}>")
+                linearised.append(f"<{self.tags[i]}>")
                 linearised.append(token)
-                linearised.append(f"</{tags[i]}>")
+                linearised.append(f"</{self.tags[i]}>")
         linearised.append(self.EOS_TOKEN)
         return linearised
 

@@ -1,8 +1,10 @@
 from utils import DatasetLoader, LoadBIOToDataset, Mappings, SequenceLinearisation, SequenceGenerator
 from transformers import AutoTokenizer, AutoModelForCausalLM, DataCollatorForLanguageModeling,  Trainer, TrainingArguments
 from datasets import Dataset
+import torch
 
 def main():
+    base_model = "Qwen/Qwen3-1.7B-Base"
     # Prepare dataset for SFT a Causal Language Model
     wnut16, _, _ = LoadBIOToDataset(path_to_train_file="data/wnut16/train.conll",
                                     path_to_validation_file="data/wnut16/dev.conll",
@@ -26,45 +28,43 @@ def main():
     linearised_dataset = Dataset.from_dict(lineraised_dict)
     
     # Add <TAGS> to tokeniser as additional special tokens -> Prevent those tags to be tokenised
-    custom_special_tokens = {"pad_token": "<pad>", "additional_special_tokens": list(set([tag for sent in linearised_dataset["text"] for tag in sent.split() if tag.startswith("<")]))}
-    print(custom_special_tokens)
+    additional_special_tokens = {"additional_special_tokens": list(set([tag for sent in linearised_dataset["text"] for tag in sent.split() if tag.startswith("<")]))}
+    print(additional_special_tokens)
 
     # Configurate tokenizer and overwrite some special tokens
-    tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-Embedding-0.6B")
-    tokenizer.add_special_tokens(custom_special_tokens)
-    tokenizer.padding_size = "left"
-    tokenizer.pad_token = "<pad>"
+    tokenizer = AutoTokenizer.from_pretrained(base_model)
+    tokenizer.add_special_tokens(additional_special_tokens)
+    tokenizer.pad_token = tokenizer.eos_token
 
     def tokenize(examples):
-        tokenized_output = tokenizer(examples["text"], truncation=True, padding=True, return_tensors="pt")
-        # tokenized_output["labels"] = [ids.copy() for ids in tokenized_output["input_ids"]]
+        tokenized_output = tokenizer(examples["text"], truncation=True, padding="max_length", max_length=512)
+        tokenized_output["labels"] = tokenized_output["input_ids"].copy()
         return tokenized_output 
     
 
-    tokenized_dataset = linearised_dataset.map(tokenize, batched=True, num_proc=4, remove_columns=["text"])
-    lm_dataset = tokenized_dataset# .map(group_texts, batched=True, num_proc=4)
+    lm_dataset = linearised_dataset.map(tokenize, batched=False) # linearised_dataset.map(tokenize, batched=True, num_proc=4, remove_columns=["text"])
 
-    print(lm_dataset)
-    print(lm_dataset[21])
-    print(tokenizer.convert_ids_to_tokens(lm_dataset[21]["input_ids"]))
+    # Print out an example from pre-processed dataset
+    print(lm_dataset[0])
+    print(tokenizer.convert_ids_to_tokens(lm_dataset[0]["input_ids"]))
 
     data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
      
-    model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B")
+    model = AutoModelForCausalLM.from_pretrained(base_model, device_map="auto")
     model.config.pad_token_id = tokenizer.pad_token_id
     model.resize_token_embeddings(len(tokenizer))
 
-    training_args = TrainingArguments(output_dir="./clm_ft_Qwen3-0.6B", 
-                                       eval_strategy="no", 
-                                       num_train_epochs=5,
-                                       per_device_train_batch_size=8,
-                                       gradient_accumulation_steps=2, 
-                                       fp16=True,
-                                       save_total_limit=1,
-                                       learning_rate=1e-5, 
-                                       weight_decay=1e-2,
-                                       overwrite_output_dir=True,
-                                       push_to_hub=False)
+    training_args = TrainingArguments(output_dir=f"./ft_clm_{base_model.split("/")[1]}", 
+                                      eval_strategy="no", 
+                                      num_train_epochs=10,
+                                      per_device_train_batch_size=4,
+                                      fp16=True,
+                                      save_total_limit=1,
+                                      learning_rate=5e-5, 
+                                      weight_decay=1e-2,
+                                      logging_steps=100,
+                                      overwrite_output_dir=True,
+                                      push_to_hub=False)
     trainer = Trainer(model=model, 
                      args=training_args,
                      train_dataset=lm_dataset, 
@@ -73,7 +73,7 @@ def main():
                      )
     trainer.train()
     trainer.save_model()
-    # tokenizer.save_pretrained("./clm_ft_Qwen3-0.6B")
+    tokenizer.save_pretrained(f"./ft_clm_{base_model.split("/")[1]}")
 
 if __name__=="__main__":
     main()

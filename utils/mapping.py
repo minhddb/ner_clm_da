@@ -4,23 +4,10 @@ import pandas as pd
 import os
 
 class Mappings:
-    def __init__(self, dataset: List[List[str]], words_column: str = "words", entity_column: str  = "anon_tags"):
+    def __init__(self, dataset: List[List[str]], words_column: str = "tokens", entity_column: str  = "ner_tags"):
         self.dataset = dataset
         self.words_column = words_column
         self.entity_column = entity_column
-
-    def map_column_to_column(self, map_x: str, map_y: str):
-        """
-        """
-        column_to_column_mapping = {}
-        for entry in self.dataset:
-            for tag_x, tag_y in zip(entry[map_x], entry[map_y]):
-                if tag_x.startswith("B-"):
-                    x = tag_x.strip("B-")
-                    y = tag_y.strip("B-")
-                    if x not in column_to_column_mapping:
-                        column_to_column_mapping[x] = y
-        return column_to_column_mapping
 
     def map_entities_to_sequence_distribution(self):
         """

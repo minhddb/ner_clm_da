@@ -1,17 +1,17 @@
 from datasets import Dataset
 
 class SequenceGenerator:
-    def __init__(self,dataset: Dataset, words_column: str, *tags_columns: str):
+    def __init__(self, dataset: Dataset, words_column: str, tags_column: str):
         self.dataset = dataset
         self.words_column = words_column
-        self.tags_columns = tags_columns
+        self.tags_column = tags_column
 
     def get_entity_sequence(self):
         """
         Yield sequences with annotated entities only
         """
         for _, sequence in enumerate(self.dataset):
-            if any("B-" in label for label in sequence[self.tags_columns[0]]):
+            if any("B-" in label for label in sequence[self.tags_column]):
                 yield sequence
     
     def get_sequence_by_category(self, tag_column, category):

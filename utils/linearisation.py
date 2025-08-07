@@ -39,7 +39,7 @@ class SequenceLinearisation(SequenceSegmentation):
         :return: List of linearised tokens.
         E.g.: [Token_1, Token_2, <TAG1>, Token_3, Token_4, </TAG1>, <TAG2>, Token_5 </TAG2>, Token_6, Token_7]
         """
-        linearised = [] # [self.BOS_TOKEN]
+        linearised = [self.BOS_TOKEN]
         for i, token in enumerate(self.sequence):
             if i in self.entity_tokens_ids:
                 entity = re.sub(r"^[BI]-", "", self.tags[i])
@@ -67,7 +67,6 @@ class SequenceLinearisation(SequenceSegmentation):
                 linearised.append(f"<{self.tags[i]}>")
                 linearised.append(token)
                 linearised.append(f"</{self.tags[i]}>")
-        linearised.append(self.EOS_TOKEN)
         return linearised
 
 

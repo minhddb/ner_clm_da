@@ -1,30 +1,79 @@
 from datasets import Dataset
-from typing import Dict, List
+from typing import  List
+import re
 
-class ConvertToDataset:
-    def __init__(self, augmentation: Dict, strategy: str | List[str]=None):
-        self.augmentation = augmentation
-        self.strategy = strategy
+#TODO: Work on an approach to remove entity tags from tokens sequence and create a list of NER labels for training
 
-    def __call__(self, *columns):
-        dataset_dict = dict()
-        for augmented in self.get_augmentation():
-            # Make sure that number of input columns and augmented data matches
-            assert len(augmented) == len(columns), f"{len(augmented)}, {len(columns)}"
-            # We expect the order of augmented entry to be the same as in given columns.
-            # Hence, first entry should be a list of tokens followed by further lists of tags
-            for i, column in enumerate(columns):
-                if column not in dataset_dict:
-                    dataset_dict.update({column: [augmented[i]]})
+
+class ConvertAugmentationToBIO:
+    def __init__(self,  aug_sequence: List[str], mode="span"):
+        self.aug_sequence = aug_sequence
+        self.mode = mode
+
+    def __call__(self, mode="span"):
+        assert mode in ["span", "labels"], "Allowd mode: 'span', 'labels'"
+        tokens = [token for token in self.aug_sequence if token != "<s>" and not (token.startswith("<") and token.endswith(">"))]
+        if mode == "span":
+            ner_tags = self.extract_spans()
+        if mode == "labels":
+            ner_tags = self.extract_labels()
+        assert len(tokens) == len(ner_tags), f"{len(tokens)}, {len(ner_tags)}"
+        return tokens, ner_tags
+
+    def _yield_from_augmentation(self):
+        yield from self.aug_sequence
+
+    def extract_spans(self):
+        """
+        Extract BIO tags from linearised spans. 
+        """
+        ner_tags = []
+        is_span = False
+        entity = None
+
+        for _, token in enumerate(self.aug_sequence):
+            if token != "<s>":
+                if re.fullmatch(r"<\w+>", token):
+                    is_span = True
+                    entity = token.strip("<>")
+                    continue
+                if re.fullmatch(r"<\/\w+>", token):
+                    is_span = False
+                    continue
+                if is_span:
+                    if ner_tags[-1] == "O" or ner_tags == []:
+                        ner_tags.append(f"B-{entity}")
+                    else:
+                        ner_tags.append(f"I-{entity}")
                 else:
-                    dataset_dict[column].append(augmented[i])
-        return Dataset.from_dict(dataset_dict)
+                    ner_tags.append("O")
+        return ner_tags
 
-    def get_augmentation(self):
-        if self.strategy:
-            self.strategy = [self.strategy] if str == type(self.strategy) else self.strategy
-            for strategy in self.strategy:
-                yield from self.augmentation[strategy]
-        else:
-            for strategy in self.augmentation:
-                yield from self.augmentation[strategy]
+    def extract_labels(self):
+        """
+        Extract BIO tags from linearised tokens.
+        """
+        ner_tags = []
+        is_label = False
+        label = None
+        for _, token in enumerate(self.aug_sequence):
+            if token != "<s>":
+                if token.startswith("<B-") or token.startswith("<I-"):
+                    is_label = True
+                    label = token.strip("<>")
+                elif token.startswith("</B-") or token.startswith("</I"):
+                    is_label=False
+                else:
+                    if is_label:
+                        ner_tags.append(label)
+                    else:
+                        ner_tags.append("O")
+        return ner_tags
+
+if __name__ == "__main__":
+    linearised_span = "<s> The <ORG> European Commission </ORG> said on Thursday it disagreed with <MISC> German </MISC> advice to consumers to shun <MISC> British </MISC> lamb until scientists determine whether mad cow disease can be transmitted to sheep . "
+    linearised_label = "<s> The <B-ORG> European </B-ORG> <I-ORG> Commission </I-ORG> said on Thursday it disagreed with <B-MISC> German </B-MISC> advice to consumers to shun <B-MISC> British </B-MISC> lamb until scientists determine whether mad cow disease can be transmitted to sheep ."
+    
+    converter = ConvertAugmentationToBIO(linearised_label.split())
+    tokens, ner_tags = converter(mode="labels")
+    print(tokens, ner_tags, sep="\n")
